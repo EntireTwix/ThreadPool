@@ -174,6 +174,16 @@ public:
         paused = true;
     }
 
+    //Starts the thread pool, completes tasks, and Pauses when done
+    void Finish() noexcept
+    {
+        Start();
+        while (Workers())
+        {
+        }
+        Pause()
+    }
+
     ~ThreadPool()
     {
         Stop();
