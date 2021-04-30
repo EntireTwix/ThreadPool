@@ -102,8 +102,7 @@ public:
             });
     }
 
-    template <typename T>
-    void AddTask(T &&func) noexcept
+    void AddTask(std::function<void()> &&func) noexcept
     {
         //finding worker with least jobs
         size_t smallest = -1;
