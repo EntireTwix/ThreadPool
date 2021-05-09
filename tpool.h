@@ -204,7 +204,14 @@ public:
 template <typename ForwardIt, typename UnaryFunction, unsigned size, uint_fast8_t threads>
 void asyncfor_each(ForwardIt first, ForwardIt last, UnaryFunction &&f, ThreadPool<threads> &engine)
 {
-    size_t step_sz = (last - first + 1) / engine.Workers();
+    float remainder = (float)(last - first + 1) / engine.Workers();
+
+    if (remainder > 0.f && remainder < 1.f)
+    {
+        remainder = 1;
+    }
+
+    size_t step_sz = (size_t)remainder;
     if (step_sz <= 1)
     {
         for (ForwardIt i = first; i < last; ++i)
