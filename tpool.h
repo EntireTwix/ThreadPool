@@ -26,6 +26,7 @@
 #include <condition_variable>
 #include <queue>
 #include <functional>
+#include <cassert>
 
 template <uint_fast8_t threads = 0>
 class ThreadPool final
@@ -204,6 +205,7 @@ public:
 template <typename ForwardIt, typename UnaryFunction, unsigned size, uint_fast8_t threads>
 void asyncfor_each(ForwardIt first, ForwardIt last, UnaryFunction &&f, ThreadPool<threads> &engine)
 {
+    assert(!((last - first) % engine.Workers())); //it must divide evenly
     size_t step_sz = (last - first + 1) / engine.Workers();
     if (step_sz <= 1)
     {
