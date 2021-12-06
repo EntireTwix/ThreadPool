@@ -205,7 +205,7 @@ public:
 };
 
 template <typename ForwardIt, typename UnaryFunction, uint_fast8_t threads>
-void asyncfor_each(ForwardIt first, ForwardIt last, UnaryFunction &&f, ThreadPool<threads> &engine)
+constexpr void _asyncfor_each(ForwardIt first, ForwardIt last, UnaryFunction &&f, ThreadPool<threads> &engine)
 {
     size_t size = last - first;
     size_t workers = engine.Workers();
@@ -215,22 +215,27 @@ void asyncfor_each(ForwardIt first, ForwardIt last, UnaryFunction &&f, ThreadPoo
     {
         for (; start != step * workers; start += step)
         {
-            engine.AddTask([start, step, f]()
-                           { std::for_each_n(start, step, f); });
+            engine.AddTask([first, start, step, f]()
+                           { std::for_each_n(first + start, step, f); });
         }
 
         //cleanup
         start = step * workers;
         if (start != size)
         {
-            engine.AddTask([start, size, f]()
-                           { std::for_each(start, size, f); });
+            _asyncfor_each(first + start, last, f, engine);
         }
     }
     else
     {
-        engine.AddTask([start, size, f]()
-                       { std::for_each(start, size, f); });
+        engine.AddTask([first, last, f]()
+                       { std::for_each(first, last, f); });
     }
+}
+
+template <typename ForwardIt, typename UnaryFunction, uint_fast8_t threads>
+constexpr void asyncfor_each(ForwardIt first, ForwardIt last, UnaryFunction &&f, ThreadPool<threads> &engine)
+{
+    _asyncfor_each(first, last, f, engine);
     engine.Finish();
 }
