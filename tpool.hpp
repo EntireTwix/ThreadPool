@@ -203,27 +203,3 @@ public:
         delete[] workers;
     }
 };
-
-template <typename ForwardIt, typename UnaryFunction, unsigned size, uint_fast8_t threads>
-void asyncfor_each(ForwardIt first, ForwardIt last, UnaryFunction &&f, ThreadPool<threads> &engine)
-{
-    assert(!((last - first) % engine.Workers())); //it must divide evenly
-    size_t step_sz = (last - first + 1) / engine.Workers();
-    if (step_sz <= 1)
-    {
-        for (ForwardIt i = first; i < last; ++i)
-        {
-            engine.AddTask([i, &f]()
-                           { f(*i); });
-        }
-    }
-    else
-    {
-        for (ForwardIt i = first; i < last; i += step_sz)
-        {
-            engine.AddTask([i, &f, step_sz]()
-                           { std::for_each_n(i, step_sz, f); });
-        }
-    }
-    engine.Finish();
-}
