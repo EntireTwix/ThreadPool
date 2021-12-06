@@ -203,3 +203,34 @@ public:
         delete[] workers;
     }
 };
+
+template <typename ForwardIt, typename UnaryFunction, uint_fast8_t threads>
+void asyncfor_each(ForwardIt first, ForwardIt last, UnaryFunction &&f, ThreadPool<threads> &engine)
+{
+    size_t size = last - first;
+    size_t workers = engine.Workers();
+    size_t step = size / workers, start = 0;
+
+    if (step > 0)
+    {
+        for (; start != step * workers; start += step)
+        {
+            engine.AddTask([start, step, f]()
+                           { std::for_each_n(start, step, f); });
+        }
+
+        //cleanup
+        start = step * workers;
+        if (start != size)
+        {
+            engine.AddTask([start, size, f]()
+                           { std::for_each(start, size, f); });
+        }
+    }
+    else
+    {
+        engine.AddTask([start, size, f]()
+                       { std::for_each(start, size, f); });
+    }
+    engine.Finish();
+}
