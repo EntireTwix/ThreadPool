@@ -205,107 +205,20 @@ public:
     }
 };
 
-template <uint_fast8_t workers>
-constexpr std::array<size_t, workers> CalcDistConstexpr(size_t size)
-{
-    std::array<size_t, workers> res;
-    size_t start = 0;
-
-    if (size_t step = size / workers; step > 0)
-    {
-        for (uint_fast8_t i = 0; start != step * workers; start += step, ++i)
-        {
-            res[i] += step;
-        }
-
-        //cleanup
-        start = step * workers;
-        if (start != size)
-        {
-            constexpr auto temp(CalcDistConstexpr<workers>(size - start));
-            for (uint_fast8_t i = 0; i < workers; ++i)
-            {
-                res[i] += temp[i];
-            }
-        }
-    }
-    else
-    {
-        for (size_t i = 0; i < size; ++i)
-        {
-            ++res[i];
-        }
-    }
-
-    return res;
-}
-
-std::vector<size_t> CalcDist(size_t size, uint_fast8_t workers)
-{
-    std::vector<size_t> res(workers);
-    size_t start = 0;
-
-    if (size_t step = size / workers; step > 0)
-    {
-        for (uint_fast8_t i = 0; start != step * workers; start += step, ++i)
-        {
-            res[i] += step;
-        }
-
-        //cleanup
-        start = step * workers;
-        if (start != size)
-        {
-            auto temp(CalcDist(size - start, workers));
-            for (uint_fast8_t i = 0; i < workers; ++i)
-            {
-                res[i] += temp[i];
-            }
-        }
-    }
-    else
-    {
-        for (size_t i = 0; i < size; ++i)
-        {
-            ++res[i];
-        }
-    }
-
-    return res;
-}
-
 template <typename ForwardIt, typename UnaryFunction, uint_fast8_t threads>
 constexpr void asyncfor_each_n(ForwardIt first, size_t size, UnaryFunction &&f, ThreadPool<threads> &engine)
 {
-    if constexpr (threads != 0)
-    {
-        auto dist = CalcDistConstexpr<threads>(size);
+    uint_fast8_t workers = engine.Workers();
+    size_t step = size / workers;
+    auto extra = (size % workers);
 
-        for (auto d : dist)
-        {
-            if (!d)
-            {
-                break;
-            }
-            engine.AddTask([first, f, d]()
-                           { std::for_each_n(first, d, f); });
-            first += d;
-        }
-    }
-    else
+    size_t step_adjusted = 0;
+    for (size_t i = 0; i < size; i += step_adjusted)
     {
-        auto dist = CalcDist(size, engine.Workers());
-
-        for (auto d : dist)
-        {
-            if (!d)
-            {
-                break;
-            }
-            engine.AddTask([first, f, d]()
-                           { std::for_each_n(first, d, f); });
-            first += d;
-        }
+        step_adjusted = step + (extra >= i);
+        engine.AddTask([first, step_adjusted, f]()
+                       { std::for_each_n(first, step_adjusted, f); });
+        first += step_adjusted;
     }
 
     engine.Finish();
