@@ -215,7 +215,7 @@ constexpr void asyncfor_each_n(ForwardIt first, size_t size, UnaryFunction &&f, 
     size_t step_adjusted = 0;
     for (size_t i = 0; i < size; i += step_adjusted)
     {
-        step_adjusted = step + (extra >= i);
+        step_adjusted = step + (extra * step >= i);
         engine.AddTask([first, step_adjusted, f]()
                        { std::for_each_n(first, step_adjusted, f); });
         first += step_adjusted;
