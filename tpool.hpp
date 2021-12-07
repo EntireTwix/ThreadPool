@@ -273,27 +273,32 @@ std::vector<size_t> CalcDist(size_t size, uint_fast8_t workers)
 }
 
 template <typename ForwardIt, typename UnaryFunction, uint_fast8_t threads>
-constexpr void asyncfor_each(ForwardIt first, ForwardIt last, UnaryFunction &&f, ThreadPool<threads> &engine)
+constexpr void asyncfor_each_n(ForwardIt first, size_t size, UnaryFunction &&f, ThreadPool<threads> &engine)
 {
     if constexpr (threads != 0)
     {
-        auto dist = CalcDistConstexpr(last - first);
+        auto dist = CalcDistConstexpr<threads>(size);
 
         for (auto d : dist)
         {
-            engine.AddTask([first, f, &d]() { std::for_each_n(first, d, f); });
-            first += d;
+            if (d)
+            {
+                engine.AddTask([first, f, d]() { std::for_each_n(first, d, f); });
+                first += d;
+            }
         }
     }
     else
     {
-        uint_fast8_t workers{engine.Workers()};
-        auto dist = CalcDist(last - first, workers);
+        auto dist = CalcDist(size, engine.Workers());
 
         for (auto d : dist)
         {
-            engine.AddTask([first, f, &d]() { std::for_each_n(first, d, f); });
-            first += d;
+            if (d)
+            {
+                engine.AddTask([first, f, d]() { std::for_each_n(first, d, f); });
+                first += d;
+            }
         }
     }
 
