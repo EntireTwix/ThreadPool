@@ -61,47 +61,49 @@ public:
         workers = new std::thread[threadCount];
 
         for (uint_fast8_t i = 0; i < threadCount; ++i)
-            workers[i] = std::thread([this, i]() {
-                std::function<void()> job;
-                while (!stopped)
-                {
-                    {
-                        std::unique_lock<std::mutex> jobsAccess{threadLocks[i]}; //grab ownership
-                        //std::cout << std::to_string(i) + " has grabbed ownership of its lock\n";
-                        if (jobs[i].empty() && !stopped) //wait for new jobs
-                        {
-                            //std::cout << std::to_string(i) + " is waiting\n";
-                            jobListener[i].wait(jobsAccess, [this, i]() { return !jobs[i].empty() || stopped; });
-                        }
-                        if (!jobs[i].empty())
-                        {
-                            //std::cout << std::to_string(i) + " is setting up a job\n";
-                            job = std::move(jobs[i].front()); //set up new job
-                        }
-                        //std::cout << std::to_string(i) + " giving up ownership of its lock\n\n";
-                    }
-                    //wait while paused
-                    while (paused && !stopped)
-                    {
-                        //std::to_string(i) + " is paused\n";
-                    }
+            workers[i] = std::thread([this, i]()
+                                     {
+                                         std::function<void()> job;
+                                         while (!stopped)
+                                         {
+                                             {
+                                                 std::unique_lock<std::mutex> jobsAccess{threadLocks[i]}; //grab ownership
+                                                 //std::cout << std::to_string(i) + " has grabbed ownership of its lock\n";
+                                                 if (jobs[i].empty() && !stopped) //wait for new jobs
+                                                 {
+                                                     //std::cout << std::to_string(i) + " is waiting\n";
+                                                     jobListener[i].wait(jobsAccess, [this, i]()
+                                                                         { return !jobs[i].empty() || stopped; });
+                                                 }
+                                                 if (!jobs[i].empty())
+                                                 {
+                                                     //std::cout << std::to_string(i) + " is setting up a job\n";
+                                                     job = std::move(jobs[i].front()); //set up new job
+                                                 }
+                                                 //std::cout << std::to_string(i) + " giving up ownership of its lock\n\n";
+                                             }
+                                             //wait while paused
+                                             while (paused && !stopped)
+                                             {
+                                                 //std::to_string(i) + " is paused\n";
+                                             }
 
-                    if (!stopped && !paused && job)
-                    {
-                        //std::cout << std::to_string(i) + " has grabbed ownership of its lock\n";
-                        std::unique_lock<std::mutex> jobsAccess{threadLocks[i]}; //grab ownership
+                                             if (!stopped && !paused && job)
+                                             {
+                                                 //std::cout << std::to_string(i) + " has grabbed ownership of its lock\n";
+                                                 std::unique_lock<std::mutex> jobsAccess{threadLocks[i]}; //grab ownership
 
-                        //std::cout << std::to_string(i) + " has begon working\n";
-                        job(); //do work
-                        //std::cout << std::to_string(i) + " has stopped working\n";
+                                                 //std::cout << std::to_string(i) + " has begon working\n";
+                                                 job(); //do work
+                                                 //std::cout << std::to_string(i) + " has stopped working\n";
 
-                        jobs[i].pop(); //pop job because its done
-                        //std::cout << std::to_string(i) + " has popped its job\n";
+                                                 jobs[i].pop(); //pop job because its done
+                                                 //std::cout << std::to_string(i) + " has popped its job\n";
 
-                        //std::cout << std::to_string(i) + " giving up ownership of its lock\n\n";
-                    }
-                }
-            });
+                                                 //std::cout << std::to_string(i) + " giving up ownership of its lock\n\n";
+                                             }
+                                         }
+                                     });
     }
 
     void AddTask(std::function<void()> &&func) noexcept
@@ -207,9 +209,9 @@ template <uint_fast8_t workers>
 constexpr std::array<size_t, workers> CalcDistConstexpr(size_t size)
 {
     std::array<size_t, workers> res;
-    size_t step = size / workers, start = 0;
+    size_t start = 0;
 
-    if (step > 0)
+    if (size_t step = size / workers; step > 0)
     {
         for (uint_fast8_t i = 0; start != step * workers; start += step, ++i)
         {
@@ -241,9 +243,9 @@ constexpr std::array<size_t, workers> CalcDistConstexpr(size_t size)
 std::vector<size_t> CalcDist(size_t size, uint_fast8_t workers)
 {
     std::vector<size_t> res(workers);
-    size_t step = size / workers, start = 0;
+    size_t start = 0;
 
-    if (step > 0)
+    if (size_t step = size / workers; step > 0)
     {
         for (uint_fast8_t i = 0; start != step * workers; start += step, ++i)
         {
@@ -281,11 +283,13 @@ constexpr void asyncfor_each_n(ForwardIt first, size_t size, UnaryFunction &&f, 
 
         for (auto d : dist)
         {
-            if (d)
+            if (!d)
             {
-                engine.AddTask([first, f, d]() { std::for_each_n(first, d, f); });
-                first += d;
+                break;
             }
+            engine.AddTask([first, f, d]()
+                           { std::for_each_n(first, d, f); });
+            first += d;
         }
     }
     else
@@ -294,11 +298,13 @@ constexpr void asyncfor_each_n(ForwardIt first, size_t size, UnaryFunction &&f, 
 
         for (auto d : dist)
         {
-            if (d)
+            if (!d)
             {
-                engine.AddTask([first, f, d]() { std::for_each_n(first, d, f); });
-                first += d;
+                break;
             }
+            engine.AddTask([first, f, d]()
+                           { std::for_each_n(first, d, f); });
+            first += d;
         }
     }
 
