@@ -27,6 +27,7 @@
 #include <queue>
 #include <functional>
 #include <cassert>
+#include <array>
 
 template <uint_fast8_t threads = 0>
 class ThreadPool final
@@ -60,49 +61,47 @@ public:
         workers = new std::thread[threadCount];
 
         for (uint_fast8_t i = 0; i < threadCount; ++i)
-            workers[i] = std::thread([this, i]()
-                                     {
-                                         std::function<void()> job;
-                                         while (!stopped)
-                                         {
-                                             {
-                                                 std::unique_lock<std::mutex> jobsAccess{threadLocks[i]}; //grab ownership
-                                                 //std::cout << std::to_string(i) + " has grabbed ownership of its lock\n";
-                                                 if (jobs[i].empty() && !stopped) //wait for new jobs
-                                                 {
-                                                     //std::cout << std::to_string(i) + " is waiting\n";
-                                                     jobListener[i].wait(jobsAccess, [this, i]()
-                                                                         { return !jobs[i].empty() || stopped; });
-                                                 }
-                                                 if (!jobs[i].empty())
-                                                 {
-                                                     //std::cout << std::to_string(i) + " is setting up a job\n";
-                                                     job = std::move(jobs[i].front()); //set up new job
-                                                 }
-                                                 //std::cout << std::to_string(i) + " giving up ownership of its lock\n\n";
-                                             }
-                                             //wait while paused
-                                             while (paused && !stopped)
-                                             {
-                                                 //std::to_string(i) + " is paused\n";
-                                             }
+            workers[i] = std::thread([this, i]() {
+                std::function<void()> job;
+                while (!stopped)
+                {
+                    {
+                        std::unique_lock<std::mutex> jobsAccess{threadLocks[i]}; //grab ownership
+                        //std::cout << std::to_string(i) + " has grabbed ownership of its lock\n";
+                        if (jobs[i].empty() && !stopped) //wait for new jobs
+                        {
+                            //std::cout << std::to_string(i) + " is waiting\n";
+                            jobListener[i].wait(jobsAccess, [this, i]() { return !jobs[i].empty() || stopped; });
+                        }
+                        if (!jobs[i].empty())
+                        {
+                            //std::cout << std::to_string(i) + " is setting up a job\n";
+                            job = std::move(jobs[i].front()); //set up new job
+                        }
+                        //std::cout << std::to_string(i) + " giving up ownership of its lock\n\n";
+                    }
+                    //wait while paused
+                    while (paused && !stopped)
+                    {
+                        //std::to_string(i) + " is paused\n";
+                    }
 
-                                             if (!stopped && !paused && job)
-                                             {
-                                                 //std::cout << std::to_string(i) + " has grabbed ownership of its lock\n";
-                                                 std::unique_lock<std::mutex> jobsAccess{threadLocks[i]}; //grab ownership
+                    if (!stopped && !paused && job)
+                    {
+                        //std::cout << std::to_string(i) + " has grabbed ownership of its lock\n";
+                        std::unique_lock<std::mutex> jobsAccess{threadLocks[i]}; //grab ownership
 
-                                                 //std::cout << std::to_string(i) + " has begon working\n";
-                                                 job(); //do work
-                                                 //std::cout << std::to_string(i) + " has stopped working\n";
+                        //std::cout << std::to_string(i) + " has begon working\n";
+                        job(); //do work
+                        //std::cout << std::to_string(i) + " has stopped working\n";
 
-                                                 jobs[i].pop(); //pop job because its done
-                                                 //std::cout << std::to_string(i) + " has popped its job\n";
+                        jobs[i].pop(); //pop job because its done
+                        //std::cout << std::to_string(i) + " has popped its job\n";
 
-                                                 //std::cout << std::to_string(i) + " giving up ownership of its lock\n\n";
-                                             }
-                                         }
-                                     });
+                        //std::cout << std::to_string(i) + " giving up ownership of its lock\n\n";
+                    }
+                }
+            });
     }
 
     void AddTask(std::function<void()> &&func) noexcept
@@ -158,7 +157,7 @@ public:
         return false;
     }
 
-    int Workers() const noexcept
+    uint_fast8_t Workers() const noexcept
     {
         return threadCount;
     }
@@ -204,38 +203,99 @@ public:
     }
 };
 
-template <typename ForwardIt, typename UnaryFunction, uint_fast8_t threads>
-constexpr void _asyncfor_each(ForwardIt first, ForwardIt last, UnaryFunction &&f, ThreadPool<threads> &engine)
+template <uint_fast8_t workers>
+constexpr std::array<size_t, workers> CalcDistConstexpr(size_t size)
 {
-    size_t size = last - first;
-    size_t workers = engine.Workers();
+    std::array<size_t, workers> res;
     size_t step = size / workers, start = 0;
 
     if (step > 0)
     {
-        for (; start != step * workers; start += step)
+        for (uint_fast8_t i = 0; start != step * workers; start += step, ++i)
         {
-            engine.AddTask([first, start, step, f]()
-                           { std::for_each_n(first + start, step, f); });
+            res[i] += step;
         }
 
         //cleanup
         start = step * workers;
         if (start != size)
         {
-            _asyncfor_each(first + start, last, f, engine);
+            constexpr auto temp(CalcDistConstexpr<workers>(size - start));
+            for (uint_fast8_t i = 0; i < workers; ++i)
+            {
+                res[i] += temp[i];
+            }
         }
     }
     else
     {
-        engine.AddTask([first, last, f]()
-                       { std::for_each(first, last, f); });
+        for (size_t i = 0; i < size; ++i)
+        {
+            ++res[i];
+        }
     }
+
+    return res;
+}
+
+std::vector<size_t> CalcDist(size_t size, uint_fast8_t workers)
+{
+    std::vector<size_t> res(workers);
+    size_t step = size / workers, start = 0;
+
+    if (step > 0)
+    {
+        for (uint_fast8_t i = 0; start != step * workers; start += step, ++i)
+        {
+            res[i] += step;
+        }
+
+        //cleanup
+        start = step * workers;
+        if (start != size)
+        {
+            auto temp(CalcDist(size - start, workers));
+            for (uint_fast8_t i = 0; i < workers; ++i)
+            {
+                res[i] += temp[i];
+            }
+        }
+    }
+    else
+    {
+        for (size_t i = 0; i < size; ++i)
+        {
+            ++res[i];
+        }
+    }
+
+    return res;
 }
 
 template <typename ForwardIt, typename UnaryFunction, uint_fast8_t threads>
 constexpr void asyncfor_each(ForwardIt first, ForwardIt last, UnaryFunction &&f, ThreadPool<threads> &engine)
 {
-    _asyncfor_each(first, last, f, engine);
+    if constexpr (threads != 0)
+    {
+        auto dist = CalcDistConstexpr(last - first);
+
+        for (auto d : dist)
+        {
+            engine.AddTask([first, f, &d]() { std::for_each_n(first, d, f); });
+            first += d;
+        }
+    }
+    else
+    {
+        uint_fast8_t workers{engine.Workers()};
+        auto dist = CalcDist(last - first, workers);
+
+        for (auto d : dist)
+        {
+            engine.AddTask([first, f, &d]() { std::for_each_n(first, d, f); });
+            first += d;
+        }
+    }
+
     engine.Finish();
 }
