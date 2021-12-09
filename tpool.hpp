@@ -159,7 +159,7 @@ public:
         return false;
     }
 
-    uint_fast8_t Workers() const noexcept
+    int Workers() const noexcept
     {
         return threadCount;
     }
@@ -211,7 +211,7 @@ void asyncfor_each_n(ForwardIt first, size_t size, UnaryFunction &&f, ThreadPool
     uint_fast8_t workers = engine.Workers();
     size_t step = size / workers;
     auto extra = (size % workers);
-    if (step)
+    if (step > 1)
     {
         extra *= step;
     }
